@@ -1,5 +1,6 @@
 
 {
+  "version": 2,
   "outputDirectory": "public",
   "functions": {
     "api/index.php": {
@@ -8,8 +9,20 @@
   },
   "routes": [
     {
+      "src": "/",
+      "dest": "/api/index.php"
+    },
+    {
+      "src": "/index\\.php",
+      "dest": "/api/index.php"
+    },
+    {
       "src": "/build/(.*)",
-      "dest": "/public/build/$1"
+      "dest": "/build/$1"
+    },
+    {
+      "src": "/(.*\\.(?:css|js|png|jpg|jpeg|gif|svg|ico|ttf|woff|woff2|eot|otf|webp|avif|txt|json))$",
+      "dest": "/$1"
     },
     {
       "src": "/(.*)",
@@ -17,5 +30,3 @@
     }
   ]
 }
-
-
