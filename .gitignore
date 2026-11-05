@@ -1,7 +1,8 @@
 *.log
 .DS_Store
 .env
-.env.example
+.env.*
+!.env.example
 .env.backup
 .env.production
 .phpactor.json
@@ -33,5 +34,3 @@ docker-compose.yaml
 docker-compose.yml
 compose.yaml
 compose.yml
-Dockerfile
-.dockerignore
