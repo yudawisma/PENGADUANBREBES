@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import Icon from '../common/Icon';
 import StepperIndicator from '../Report/StepperIndicator';
 import Step1Info from '../Report/Step1Info';
@@ -16,6 +17,8 @@ export default function ReportForm({ initialCategory = '' }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(emptyForm);
   const [ticket, setTicket] = useState(null);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const update = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -27,17 +30,36 @@ export default function ReportForm({ initialCategory = '' }) {
     }
   }, [initialCategory]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // TODO: kirim ke Laravel, contoh:
-    // const data = new FormData();
-    // Object.entries(form).forEach(([k, v]) => k !== 'files' && data.append(k, v ?? ''));
-    // form.files.forEach((f) => data.append('files[]', f));
-    // const res = await axios.post('/api/reports', data);  -> pakai res.data.ticket
-    const fakeTicket = `BRB-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900000) + 100000)}`;
-    setTicket(fakeTicket);
-    setForm(emptyForm);
-    setStep(1);
+    setSubmitting(true);
+    setError('');
+
+    const data = new FormData();
+    data.append('category', form.category);
+    data.append('title', form.title);
+    data.append('description', form.description);
+    data.append('kecamatan', form.kecamatan);
+    data.append('desa', form.desa);
+    data.append('alamat', form.alamat);
+    data.append('lat', form.lat ?? '');
+    data.append('lng', form.lng ?? '');
+    data.append('name', form.name);
+    data.append('phone', form.phone);
+    data.append('agree', form.agree ? '1' : '0');
+    form.files.forEach((file) => data.append('files[]', file));
+
+    try {
+      const response = await axios.post('/api/reports', data);
+      setTicket(response.data.ticket);
+      setForm(emptyForm);
+      setStep(1);
+    } catch (requestError) {
+      const firstError = Object.values(requestError.response?.data?.errors ?? {}).flat()[0];
+      setError(firstError || 'Laporan belum dapat dikirim. Periksa koneksi lalu coba kembali.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -66,6 +88,8 @@ export default function ReportForm({ initialCategory = '' }) {
           {step === 4 && <Step4Confirm form={form} update={update} onBack={() => setStep(3)} />}
         </form>
 
+        {error && <p role="alert" className="mt-space-sm rounded-xl bg-error-container px-4 py-3 font-body-sm text-body-sm text-on-error-container">{error}</p>}
+
         {ticket && (
           <div className="mt-space-md p-space-md rounded-2xl bg-surface-container border-2 border-secondary/30 text-on-surface">
             <div className="flex items-start gap-space-sm">
@@ -79,7 +103,7 @@ export default function ReportForm({ initialCategory = '' }) {
                 </p>
                 <div className="mt-space-sm flex gap-space-sm">
                   <a href="#cek-status" className="px-3 py-1.5 rounded-lg bg-primary text-on-primary font-label-sm text-label-sm">Pantau Tiket Sekarang</a>
-                  <button type="button" onClick={() => setTicket(null)} className="px-3 py-1.5 rounded-lg bg-surface-container-low text-primary font-label-sm text-label-sm">
+                  <button type="button" onClick={() => setTicket(null)} disabled={submitting} className="px-3 py-1.5 rounded-lg bg-surface-container-low text-primary font-label-sm text-label-sm">
                     Tutup Notifikasi
                   </button>
                 </div>

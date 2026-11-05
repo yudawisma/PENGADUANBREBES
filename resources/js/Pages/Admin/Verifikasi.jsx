@@ -1,21 +1,38 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import axios from 'axios';
 import AdminLayout from '../../components/Admin/AdminLayout';
 import Toast from '../../components/Admin/Toast';
 import Icon from '../../components/common/Icon';
 import VerifKpis from '../../components/Admin/Verifikasi/VerifKpis';
 import VerifFilterBar from '../../components/Admin/Verifikasi/VerifFilterBar';
 import VerifQueue from '../../components/Admin/Verifikasi/VerifQueue';
-import { initialQueue } from '../../data/verifikasiData';
 
 const emptyFilter = { search: '', category: '', kecamatan: '', status: '' };
 
 export default function Verifikasi() {
-  const [tickets, setTickets] = useState(initialQueue);
+  const [tickets, setTickets] = useState([]);
   const [draft, setDraft] = useState(emptyFilter);
   const [applied, setApplied] = useState(emptyFilter);
   const [selected, setSelected] = useState(new Set());
   const [toast, setToast] = useState({ show: false, title: '', text: '' });
   const timer = useRef(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadQueue = async () => {
+    setLoading(true);
+    try {
+      const { data } = await axios.get('/api/admin/queue', { params: { ...applied, per_page: 100 } });
+      setTickets(data.data);
+    } catch {
+      notify('Data Gagal Dimuat', 'Antrean belum dapat diambil dari server.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadQueue();
+  }, [applied]);
 
   const notify = (title, text) => {
     setToast({ show: true, title, text });
@@ -46,24 +63,31 @@ export default function Verifikasi() {
   const patch = (ids, changes) => setTickets((list) => list.map((t) => (ids.includes(t.id) ? { ...t, ...changes } : t)));
 
   // TODO: semua perubahan di bawah ini perlu dikirim ke Laravel (axios.put)
-  const handleAction = (t) => {
-    if (t.status === 'menunggu') {
-      patch([t.id], { status: 'ditelaah', verifier: 'Oleh: Admin Diskominfo' });
-      notify('Laporan Mulai Ditelaah', `#${t.id} kini berstatus Sedang Ditelaah.`);
-    } else if (t.status === 'ditelaah') {
-      patch([t.id], { status: 'valid', verifier: 'Diteruskan ke OPD teknis' });
-      notify('Laporan Terverifikasi', `#${t.id} siap diteruskan ke OPD teknis.`);
-    } else if (t.status === 'butuh_bukti') {
-      notify('Permintaan Foto Terkirim', `Pelapor #${t.id} diminta mengunggah foto yang lebih jelas.`);
+  const handleAction = async (ticket) => {
+    const status = ticket.status === 'menunggu' ? 'ditelaah' : 'valid';
+    try {
+      const { data } = await axios.patch(`/api/admin/queue/${encodeURIComponent(ticket.id)}/verification`, {
+        status,
+        message: ticket.status === 'butuh_bukti' ? 'Pelapor diminta mengunggah foto yang lebih jelas.' : undefined,
+      });
+      patch([ticket.id], data);
+      notify(status === 'ditelaah' ? 'Laporan Mulai Ditelaah' : 'Laporan Terverifikasi', `#${ticket.id} berhasil diperbarui.`);
+    } catch {
+      notify('Perubahan Gagal Disimpan', `Status laporan #${ticket.id} belum berubah.`);
     }
   };
 
-  const handleBulk = () => {
-    const ids = tickets.filter((t) => selected.has(t.id) && ['menunggu', 'ditelaah'].includes(t.status)).map((t) => t.id);
+  const handleBulk = async () => {
+    const ids = tickets.filter((ticket) => selected.has(ticket.id) && ['menunggu', 'ditelaah'].includes(ticket.status)).map((ticket) => ticket.id);
     if (ids.length === 0) return notify('Tidak Ada yang Diproses', 'Laporan terpilih tidak berstatus menunggu / ditelaah.');
-    patch(ids, { status: 'valid', verifier: 'Diverifikasi massal' });
-    setSelected(new Set());
-    notify('Verifikasi Massal Berhasil', `${ids.length} laporan terverifikasi.`);
+    try {
+      const { data } = await axios.post('/api/admin/queue/bulk-verify', { ids });
+      patch(ids, { status: 'valid', verifier: 'Diverifikasi massal' });
+      setSelected(new Set());
+      notify('Verifikasi Massal Berhasil', `${data.verified} laporan terverifikasi.`);
+    } catch {
+      notify('Verifikasi Massal Gagal', 'Periksa koneksi lalu coba kembali.');
+    }
   };
 
   return (
@@ -81,20 +105,22 @@ export default function Verifikasi() {
           </p>
         </div>
         <div className="flex items-center gap-space-sm self-start md:self-auto">
-          <button type="button" className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container-high text-primary font-label-md text-label-md hover:bg-surface-variant transition-all shadow-sm group">
+            <button type="button" onClick={loadQueue} disabled={loading} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container-high text-primary font-label-md text-label-md hover:bg-surface-variant transition-all shadow-sm group">
             <Icon name="sync" className="text-[18px] group-hover:rotate-180 transition-transform duration-500 text-secondary" />
             <span>Sinkronisasi Data</span>
           </button>
-          <button type="button" className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary-container text-on-primary font-label-md text-label-md hover:bg-primary transition-all shadow-sm">
+          <a href="/api/admin/queue/export" className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary-container text-on-primary font-label-md text-label-md hover:bg-primary transition-all shadow-sm">
             <Icon name="download_for_offline" className="text-[18px]" />
             <span>Export Antrean</span>
-          </button>
+          </a>
         </div>
       </div>
 
-      <VerifKpis />
+      <VerifKpis rows={tickets} />
       <VerifFilterBar draft={draft} setDraft={setDraft} onApply={() => setApplied(draft)} onReset={() => { setDraft(emptyFilter); setApplied(emptyFilter); }} />
-      <VerifQueue rows={rows} selected={selected} onToggle={toggle} onToggleAll={toggleAll} onAction={handleAction} onBulkVerify={handleBulk} />
+      {loading && tickets.length === 0 ? <p className="py-10 text-center text-on-surface-variant">Memuat antrean laporan...</p> : (
+        <VerifQueue rows={rows} selected={selected} onToggle={toggle} onToggleAll={toggleAll} onAction={handleAction} onBulkVerify={handleBulk} />
+      )}
 
       <div className="rounded-xl bg-surface-container-high/60 p-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
         <div className="flex items-start sm:items-center gap-space-sm">

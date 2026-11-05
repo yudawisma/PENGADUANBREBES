@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Category;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -21,5 +22,20 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        foreach ([
+            'infrastruktur' => 'Jalan Rusak & Jembatan',
+            'lampu' => 'Lampu Jalan & PJU',
+            'drainase' => 'Banjir & Drainase',
+            'kebersihan' => 'Sampah & Kebersihan',
+            'fasilitas' => 'Fasilitas Umum',
+            'kesehatan' => 'Kesehatan & Puskesmas',
+            'pendidikan' => 'Pendidikan & Sekolah',
+            'pertanian' => 'Lingkungan & Pertanian',
+            'pelayanan' => 'Pelayanan Publik & KTP',
+            'sosial' => 'Masalah Sosial & Bansos',
+        ] as $slug => $name) {
+            Category::firstOrCreate(['slug' => $slug], ['name' => $name]);
+        }
     }
 }
